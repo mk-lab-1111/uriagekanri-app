@@ -459,9 +459,8 @@ const TAXRATE=0.10;
 const KEICATS=['仕入','外注費','旅費交通費','通信費','消耗品費','接待交際費','地代家賃','水道光熱費','広告宣伝費','その他経費'];
 const KOUCATS=['ふるさと納税','医療費','寄附金','生命保険料','社会保険料','その他控除'];
 
-let store=load();
-let juchus=store.juchus||[];   // 受注（status: todo/done, 入金済で txnへ）
-let txns=store.txns||[];        // 売上(uri)・経費(kei)・控除(kou)
+let juchus=[];   // 受注（GASから読み込み）
+let txns=[];     // 売上・経費・控除（GASから読み込み）
 let kType='kei', kCat='', kTax='in', jTax='in';
 let jfilter='all';
 let period='year', curMonth=new Date().getMonth()+1;
@@ -473,9 +472,32 @@ let accOpen={uri:false,juchu:false,kei:false};
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbxzwxFLmKVZbPNElQOm6I-aHETVMsW4cy10nnjNBuS6G6ygIcKHllrt1Fga8ejJPKSsCQ/exec';
 
-async function gasPost(body){
-  const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
-  return await r.json();
+function gasPost(body){
+  return new Promise((resolve, reject)=>{
+    const cbName = 'cb_' + Date.now();
+    const script = document.createElement('script');
+    const timer = setTimeout(()=>{
+      cleanup();
+      reject(new Error('タイムアウト'));
+    }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = function(res){
+      cleanup();
+      resolve(res);
+    };
+    script.src = GAS_URL
+      + '?callback=' + cbName
+      + '&data=' + encodeURIComponent(JSON.stringify(body));
+    script.onerror = function(){
+      cleanup();
+      reject(new Error('通信エラー'));
+    };
+    document.head.appendChild(script);
+  });
 }
 
 async function doLogin(){
