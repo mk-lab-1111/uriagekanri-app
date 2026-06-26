@@ -232,6 +232,25 @@
 </head>
 <body>
 
+<!-- ログイン画面 -->
+<div id="loginPage" style="position:fixed;inset:0;background:#f4f5f6;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:32px">
+  <div style="width:100%;max-width:360px;background:#fff;border-radius:18px;padding:32px 24px;box-shadow:0 4px 24px rgba(0,0,0,.1)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:#8bc34a;border-radius:16px;font-size:26px;margin-bottom:12px">📒</div>
+      <div style="font-size:20px;font-weight:800;color:#1a1a1c">収支台帳</div>
+      <div style="font-size:13px;color:#5c5c60;margin-top:4px">パスワードを入力してください</div>
+    </div>
+    <input id="loginPass" type="password" placeholder="パスワード"
+      style="width:100%;border:1.5px solid #c4c4c9;border-radius:10px;padding:14px;font-size:16px;font-family:inherit;outline:none;margin-bottom:12px"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginErr" style="color:#e2574c;font-size:13px;font-weight:700;margin-bottom:10px;display:none">パスワードが違います</div>
+    <button onclick="doLogin()"
+      style="width:100%;background:#8bc34a;border:none;border-radius:10px;padding:15px;font-size:15px;font-weight:800;color:#fff;font-family:inherit;cursor:pointer">
+      ログイン
+    </button>
+  </div>
+</div>
+
 <div class="head">
   <div class="row">
     <h1><span class="seal" id="headSeal">表</span><span id="headTitle">ダッシュボード</span></h1>
@@ -452,8 +471,57 @@ let editJuchuId=null, editTxnId=null;
 let series={uri:true,juchu:true,kei:true};
 let accOpen={uri:false,juchu:false,kei:false};
 
-function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):{}}catch(e){return {}}}
-function persist(){localStorage.setItem(KEY,JSON.stringify({juchus,txns}))}
+const GAS_URL='https://script.google.com/macros/s/AKfycbxzwxFLmKVZbPNElQOm6I-aHETVMsW4cy10nnjNBuS6G6ygIcKHllrt1Fga8ejJPKSsCQ/exec';
+
+async function gasPost(body){
+  const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify(body)});
+  return await r.json();
+}
+
+async function doLogin(){
+  const pass=document.getElementById('loginPass').value;
+  document.getElementById('loginErr').style.display='none';
+  const btn=document.querySelector('#loginPage button');
+  btn.textContent='確認中...';btn.disabled=true;
+  try{
+    const res=await gasPost({action:'login',password:pass});
+    if(res.ok){
+      document.getElementById('loginPage').style.display='none';
+      await loadFromGAS();
+    }else{
+      document.getElementById('loginErr').style.display='block';
+    }
+  }catch(e){
+    document.getElementById('loginErr').textContent='通信エラーが発生しました';
+    document.getElementById('loginErr').style.display='block';
+  }
+  btn.textContent='ログイン';btn.disabled=false;
+}
+
+async function loadFromGAS(){
+  showSaving('読み込み中...');
+  try{
+    const res=await gasPost({action:'load'});
+    if(res.ok){juchus=res.data.juchus||[];txns=res.data.txns||[];}
+  }catch(e){console.log('load error',e)}
+  hideSaving();
+  initYears();switchTab('dash');
+}
+
+async function persist(){
+  showSaving('保存中...');
+  try{
+    await gasPost({action:'save',payload:{juchus,txns}});
+  }catch(e){console.log('save error',e)}
+  hideSaving();
+}
+
+function showSaving(msg){
+  let el=document.getElementById('savingToast');
+  if(!el){el=document.createElement('div');el.id='savingToast';el.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#2e8546;color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:700;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,.2)';document.body.appendChild(el)}
+  el.textContent=msg;el.style.display='block';
+}
+function hideSaving(){const el=document.getElementById('savingToast');if(el)el.style.display='none'}
 function yen(n){return '¥'+Math.round(n).toLocaleString('ja-JP')}
 function calcTax(amt,mode){if(mode==='in'){const body=Math.round(amt/(1+TAXRATE));return {gross:amt,body,tax:amt-body}}return {gross:amt,body:amt,tax:0}}
 
@@ -729,7 +797,8 @@ function exportCSV(){
 function esc(s){return s.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
 let tT;function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),1900)}
 
-initYears();switchTab('dash');
+// ログイン後にloadFromGAS()が呼ばれる
+setTimeout(()=>document.getElementById('loginPass').focus(),300);
 </script>
 </body>
 </html>
