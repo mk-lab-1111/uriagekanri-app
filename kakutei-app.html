@@ -238,12 +238,15 @@
     <div style="text-align:center;margin-bottom:28px">
       <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:#8bc34a;border-radius:16px;font-size:26px;margin-bottom:12px">📒</div>
       <div style="font-size:20px;font-weight:800;color:#1a1a1c">収支台帳</div>
-      <div style="font-size:13px;color:#5c5c60;margin-top:4px">パスワードを入力してください</div>
+      <div style="font-size:13px;color:#5c5c60;margin-top:4px">ログインしてください</div>
     </div>
+    <input id="loginUser" type="text" placeholder="ユーザー名"
+      style="width:100%;border:1.5px solid #c4c4c9;border-radius:10px;padding:14px;font-size:16px;font-family:inherit;outline:none;margin-bottom:10px"
+      onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
     <input id="loginPass" type="password" placeholder="パスワード"
       style="width:100%;border:1.5px solid #c4c4c9;border-radius:10px;padding:14px;font-size:16px;font-family:inherit;outline:none;margin-bottom:12px"
       onkeydown="if(event.key==='Enter')doLogin()">
-    <div id="loginErr" style="color:#e2574c;font-size:13px;font-weight:700;margin-bottom:10px;display:none">パスワードが違います</div>
+    <div id="loginErr" style="color:#e2574c;font-size:13px;font-weight:700;margin-bottom:10px;display:none">ユーザー名またはパスワードが違います</div>
     <button onclick="doLogin()"
       style="width:100%;background:#8bc34a;border:none;border-radius:10px;padding:15px;font-size:15px;font-weight:800;color:#fff;font-family:inherit;cursor:pointer">
       ログイン
@@ -500,17 +503,23 @@ function gasPost(body){
   });
 }
 
+let currentUser = '';
+
 async function doLogin(){
+  const user=document.getElementById('loginUser').value.trim();
   const pass=document.getElementById('loginPass').value;
   document.getElementById('loginErr').style.display='none';
+  if(!user){document.getElementById('loginErr').textContent='ユーザー名を入力してください';document.getElementById('loginErr').style.display='block';return}
   const btn=document.querySelector('#loginPage button');
   btn.textContent='確認中...';btn.disabled=true;
   try{
-    const res=await gasPost({action:'login',password:pass});
+    const res=await gasPost({action:'login',username:user,password:pass});
     if(res.ok){
+      currentUser=user;
       document.getElementById('loginPage').style.display='none';
       await loadFromGAS();
     }else{
+      document.getElementById('loginErr').textContent=res.msg||'ユーザー名またはパスワードが違います';
       document.getElementById('loginErr').style.display='block';
     }
   }catch(e){
@@ -523,7 +532,7 @@ async function doLogin(){
 async function loadFromGAS(){
   showSaving('読み込み中...');
   try{
-    const res=await gasPost({action:'load'});
+    const res=await gasPost({action:'load',username:currentUser});
     if(res.ok){juchus=res.data.juchus||[];txns=res.data.txns||[];}
   }catch(e){console.log('load error',e)}
   hideSaving();
@@ -533,7 +542,7 @@ async function loadFromGAS(){
 async function persist(){
   showSaving('保存中...');
   try{
-    await gasPost({action:'save',payload:{juchus,txns}});
+    await gasPost({action:'save',username:currentUser,payload:{juchus,txns}});
   }catch(e){console.log('save error',e)}
   hideSaving();
 }
