@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>収支台帳 — 確定申告サポート</title>
+<style>
+  :root{
+    --green:#3aa655;          /* 売上：濃い緑 */
+    --green-deep:#2e8546;
+    --teal:#2a9db5;           /* 受注：濃いめの水色 */
+    --red:#e2574c;            /* 経費：赤 */
+    --kin:#e0a93b;            /* 控除：黄系 */
+    --accent:#8bc34a;         /* 差し色：黄緑 */
+    --accent-soft:#f1f8e9;
+    --ai:#3aa655;             /* メイン＝緑系に統一（ダッシュ等のUI基調） */
+    --ai-deep:#2e8546;
+    --shu:#e2574c;            /* 経費（旧名互換） */
+    --midori:#3aa655;         /* 売上（旧名互換） */
+    --murasaki:#2a9db5;       /* 受注（旧名互換）→ 水色 */
+    --kinari:#f4f5f6;         /* 背景：薄いグレー */
+    --washi:#ffffff;          /* カード：白 */
+    --sumi:#1a1a1c;           /* 文字：黒に近く */
+    --usu:#5c5c60;            /* 補助文字：濃いめグレー */
+    --sen:#c4c4c9;            /* 罫線：はっきり見える濃さ */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{overscroll-behavior-y:none}
+  body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+    background:var(--kinari);color:var(--sumi);max-width:480px;margin:0 auto;min-height:100vh;
+    -webkit-font-smoothing:antialiased;padding-bottom:148px}
+  .head{background:var(--washi);color:var(--sumi);padding:16px 20px 12px;position:sticky;top:0;z-index:30;
+    border-bottom:1px solid var(--sen)}
+  .head .row{display:flex;align-items:baseline;justify-content:space-between}
+  .head h1{font-size:18px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:9px;color:var(--sumi)}
+  .head h1 .seal{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;
+    border:none;color:#fff;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800;letter-spacing:0}
+  .yearsel{display:flex;align-items:center;gap:4px;background:var(--accent-soft);
+    border:1px solid var(--accent);border-radius:8px;padding:5px 8px}
+  .yearsel select{background:transparent;border:none;color:var(--green-deep);font-size:15px;font-weight:700;
+    font-family:inherit;appearance:none;outline:none;padding-right:2px}
+  .yearsel select option{color:var(--sumi)}
+  .yearsel .ydō{font-size:11px;color:var(--green-deep);opacity:.7}
+
+  .periodbar{display:flex;gap:6px;margin-top:13px}
+  .periodbar .pchip{flex:none;font-size:12px;padding:6px 13px;border-radius:20px;
+    background:var(--kinari);border:1px solid var(--sen);color:var(--usu);
+    font-weight:600;cursor:pointer;white-space:nowrap}
+  .periodbar .pchip.on{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+  .monthrow{display:flex;gap:5px;margin-top:9px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .monthrow::-webkit-scrollbar{display:none}
+  .mchip{flex:none;font-size:12px;padding:5px 11px;border-radius:16px;background:var(--kinari);
+    border:1px solid var(--sen);color:var(--usu);font-weight:600;cursor:pointer}
+  .mchip.on{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
+
+  .wrap{padding:18px 16px}
+  .page{display:none} .page.active{display:block}
+
+  .summary{background:var(--washi);border:1px solid var(--sen);border-radius:14px;padding:18px 18px 6px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.03)}
+  .summary .eyebrow{font-size:11px;letter-spacing:.18em;color:var(--usu);font-weight:800;margin-bottom:6px}
+  .summary .scope{font-size:14px;font-weight:800;color:var(--sumi);margin-bottom:14px}
+  .bigfig{margin-bottom:16px}
+  .bigfig .lbl{font-size:12px;color:var(--usu);margin-bottom:3px;font-weight:700}
+  .bigfig .val{font-size:32px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+  .bigfig .val.plus{color:var(--green)} .bigfig .val.minus{color:var(--red)}
+  .bigfig .val .yen{font-size:17px;font-weight:700;margin-right:2px;color:var(--usu)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sen);border-radius:10px;overflow:hidden;margin-bottom:6px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--sen);border-radius:10px;overflow:hidden;margin-bottom:6px}
+  .cell{background:var(--washi);padding:13px 14px}
+  .cell .ck{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--usu);margin-bottom:4px;font-weight:700}
+  .dot{width:9px;height:9px;border-radius:2px;display:inline-block;flex:none}
+  .dot.uri{background:var(--midori)} .dot.kei{background:var(--shu)}
+  .dot.kou{background:var(--kin)} .dot.juchu{background:var(--murasaki)}
+  .cell .cv{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+  .cell .tax{font-size:10px;color:var(--usu);margin-top:2px;font-weight:600}
+  .kou-line{display:flex;justify-content:space-between;align-items:center;padding:11px 2px 4px;font-size:13px;color:var(--usu);font-weight:600}
+  .kou-line b{color:var(--kin);font-weight:800;font-variant-numeric:tabular-nums}
+
+  .card{background:var(--washi);border:1px solid var(--sen);border-radius:14px;padding:16px;margin-bottom:16px}
+  .card h2{font-size:13px;font-weight:700;letter-spacing:.04em;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--ai-deep)}
+  .card h2::before{content:"";width:4px;height:15px;background:var(--accent);border-radius:2px}
+  .serieschips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .schip{font-size:11px;padding:5px 12px;border-radius:18px;border:1px solid var(--sen);background:var(--washi);
+    color:var(--usu);font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px}
+  .schip.on{color:#fff}
+  .schip.on.s-uri{background:var(--midori);border-color:var(--midori)}
+  .schip.on.s-juchu{background:var(--murasaki);border-color:var(--murasaki)}
+  .schip.on.s-kei{background:var(--shu);border-color:var(--shu)}
+  .chartbox{position:relative;width:100%}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .gx{font-size:9px;fill:var(--usu);font-variant-numeric:tabular-nums;font-weight:700}
+  .gridline{stroke:var(--sen);stroke-width:1}
+  .nodata{text-align:center;color:var(--usu);font-size:13px;padding:30px 0}
+
+  .listhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 2px}
+  .listhead .t{font-size:13px;font-weight:800;color:var(--sumi)}
+  .listhead .filt{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .chip{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid var(--sen);background:var(--washi);
+    color:var(--usu);font-weight:700;cursor:pointer;transition:.15s}
+  .chip.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .txn{background:var(--washi);border:1px solid var(--sen);border-radius:11px;padding:12px 14px;margin-bottom:8px;
+    display:flex;align-items:center;gap:12px;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .txn .bar{width:4px;align-self:stretch;border-radius:3px;flex:none;min-height:40px}
+  .txn .bar.uri{background:var(--midori)} .txn .bar.kei{background:var(--shu)}
+  .txn .bar.kou{background:var(--kin)} .txn .bar.juchu{background:var(--murasaki)}
+  .txn .info{flex:1;min-width:0}
+  .txn .nm{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sumi)}
+  .txn .meta{font-size:11px;color:var(--usu);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-weight:600}
+  .txn .cat{background:var(--kinari);padding:1px 7px;border-radius:4px;font-weight:700;color:var(--sumi)}
+  .txn .taxbadge{background:rgba(58,166,85,.08);color:var(--green-deep);padding:1px 6px;border-radius:4px;font-weight:700}
+  .txn .right{flex:none;text-align:right}
+  .txn .amt{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+  .txn .amt.uri{color:var(--midori)} .txn .amt.kei{color:var(--shu)}
+  .txn .amt.kou{color:var(--kin)} .txn .amt.juchu{color:var(--murasaki)}
+  .txn .net{font-size:10px;color:var(--usu);margin-top:1px}
+  .txn .del{flex:none;width:26px;height:26px;border:none;background:transparent;color:var(--usu);font-size:17px;cursor:pointer;opacity:.5;margin-left:4px}
+  .empty{text-align:center;padding:40px 20px;color:var(--usu)}
+  .empty .e1{font-size:38px;margin-bottom:8px;opacity:.4}
+  .empty .e2{font-size:13px;line-height:1.6}
+
+  .stbadge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700}
+  .st-todo{background:rgba(42,157,181,.13);color:var(--murasaki)}
+  .st-done{background:rgba(58,166,85,.15);color:var(--midori)}
+  .juchu-actions{display:flex;gap:6px;margin-top:9px}
+  .miniBtn{font-size:11px;padding:6px 10px;border-radius:8px;border:1px solid var(--sen);background:var(--washi);
+    font-weight:600;font-family:inherit;cursor:pointer;color:var(--usu)}
+  .miniBtn.go{background:var(--midori);color:#fff;border-color:var(--midori)}
+
+  .subhead{font-size:12px;font-weight:800;color:var(--sumi);letter-spacing:.04em;margin:4px 2px 9px;display:flex;align-items:center;gap:7px}
+  .subhead::before{content:"";width:14px;height:2px;background:var(--sen)}
+
+  .report-btn,.csv-btn{width:100%;border-radius:14px;padding:15px;font-size:13px;font-weight:700;
+    font-family:inherit;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .report-btn{background:var(--accent-soft);border:1.5px dashed var(--accent);color:var(--green-deep)}
+  .csv-btn{background:var(--green);border:none;color:#fff;box-shadow:0 4px 14px rgba(58,166,85,.28)}
+
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+    background:var(--washi);border-top:1px solid var(--sen);z-index:35;display:flex;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}
+  .tabbar button{flex:1;background:none;border:none;font-family:inherit;cursor:pointer;display:flex;
+    flex-direction:column;align-items:center;gap:3px;padding:6px 0;color:var(--usu)}
+  .tabbar button .ti{font-size:18px;line-height:1}
+  .tabbar button .tl{font-size:10px;font-weight:700}
+  .tabbar button.on{color:var(--green)}
+  .tabbar button.on .ti{transform:scale(1.05)}
+  #tab-dash.on{color:var(--green)}
+  #tab-uriage.on{color:var(--teal)}
+  #tab-keihi.on{color:var(--red)}
+  .tabbar button .ti{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1.5px solid transparent}
+  #tab-dash.on .ti{background:var(--accent-soft);border-color:var(--green)}
+  #tab-uriage.on .ti{background:rgba(42,157,181,.1);border-color:var(--teal)}
+  #tab-keihi.on .ti{background:rgba(226,87,76,.1);border-color:var(--red)}
+
+  .fab{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);width:min(448px,calc(100% - 32px));z-index:34;display:flex;gap:10px;justify-content:flex-end}
+  .fab.hidden{display:none}
+  .fab button{border:none;border-radius:26px;padding:14px 20px;font-size:14px;font-weight:700;font-family:inherit;
+    color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;gap:6px;letter-spacing:.02em}
+  .fab.single button{flex:none;border-radius:50px;width:60px;height:60px;padding:0;font-size:0}
+  .fab.single button .p{font-size:30px;font-weight:400}
+  .fab:not(.single) button{flex:1}
+  .fab .b-juchu{background:var(--teal)} .fab .b-uri{background:var(--green)} .fab .b-kei{background:var(--red)}
+  .fab button .p{font-size:17px;line-height:1}
+
+  .ov{position:fixed;inset:0;background:rgba(21,41,63,.45);z-index:50;display:none;align-items:flex-end;justify-content:center}
+  .ov.show{display:flex}
+  .sheet{background:var(--kinari);width:100%;max-width:480px;border-radius:22px 22px 0 0;
+    padding:8px 20px calc(20px + env(safe-area-inset-bottom));animation:up .3s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto}
+  @keyframes up{from{transform:translateY(100%)}to{transform:none}}
+  .grip{width:38px;height:4px;background:var(--sen);border-radius:3px;margin:6px auto 14px}
+  .sheet h3{font-size:17px;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:9px}
+  .sheet h3 .tag{width:6px;height:20px;border-radius:3px;flex:none}
+  .fld{margin-bottom:15px}
+  .fld label{display:block;font-size:12px;font-weight:600;color:var(--usu);margin-bottom:6px}
+  .fld input,.fld select{width:100%;border:1px solid var(--sen);background:var(--washi);border-radius:10px;
+    padding:13px 14px;font-size:16px;font-family:inherit;color:var(--sumi);outline:none}
+  .fld input:focus,.fld select:focus{border-color:var(--ai)}
+  .amtfld{position:relative}
+  .amtfld input{padding-left:30px;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+  .amtfld .yk{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--usu);font-size:16px;font-weight:600}
+  .catrow{display:flex;flex-wrap:wrap;gap:7px}
+  .catchip{font-size:13px;padding:9px 13px;border-radius:9px;border:1px solid var(--sen);background:var(--washi);
+    color:var(--usu);font-weight:600;cursor:pointer}
+  .catchip.on{background:var(--ai);color:#fff;border-color:var(--ai)}
+  .taxtoggle{display:flex;gap:8px}
+  .taxbtn{flex:1;text-align:center;font-size:13px;padding:11px;border-radius:10px;border:1px solid var(--sen);
+    background:var(--washi);color:var(--usu);font-weight:600;cursor:pointer}
+  .taxbtn.on{background:var(--ai);color:#fff;border-color:var(--ai)}
+  .taxbreak{font-size:11.5px;color:var(--usu);background:rgba(58,166,85,.05);border-radius:8px;padding:9px 12px;margin-top:8px;line-height:1.6;display:none}
+  .taxbreak.show{display:block}
+  .taxbreak b{color:var(--ai);font-variant-numeric:tabular-nums}
+  .kbox{background:rgba(224,169,59,.1);border:1px solid rgba(224,169,59,.4);border-radius:10px;padding:10px 12px;
+    font-size:11.5px;color:var(--kin);line-height:1.5;margin-bottom:15px}
+  .save{width:100%;border:none;border-radius:12px;padding:16px;font-size:15px;font-weight:700;color:#fff;font-family:inherit;cursor:pointer;margin-top:4px}
+
+  .toast{position:fixed;bottom:150px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ai-deep);
+    color:var(--kinari);padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:60;opacity:0;
+    transition:.3s;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .reptbl{font-size:13px;width:100%;border-collapse:collapse}
+  .reptbl tr{border-bottom:1px solid var(--sen)}
+  .reptbl td{padding:9px 2px}
+  .reptbl td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .reptbl .sub td{color:var(--usu);font-size:12px;padding-left:14px}
+  .reptbl .tot td{font-weight:800;font-size:15px;border-bottom:2px solid var(--ai);padding-top:13px}
+  .reptbl .net td{font-weight:800;font-size:16px;color:var(--ai);border:none;padding-top:13px}
+  .reptbl .taxr td{color:var(--ai);font-size:11.5px;padding-left:14px;font-weight:600}
+  .repnote{font-size:11px;color:var(--usu);line-height:1.6;margin-top:14px}
+
+  /* アコーディオン一覧 */
+  .acc{background:var(--washi);border:1px solid var(--sen);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .acc-head{width:100%;background:none;border:none;font-family:inherit;cursor:pointer;
+    display:flex;align-items:center;justify-content:space-between;padding:15px 16px}
+  .acc-title{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:700;color:var(--sumi)}
+  .acc-meta{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:800;color:var(--sumi);font-variant-numeric:tabular-nums}
+  .acc-arrow{font-size:12px;color:var(--usu);transition:transform .2s}
+  .acc.open .acc-arrow{transform:rotate(180deg)}
+  .acc-body{display:none;border-top:1px solid var(--sen)}
+  .acc.open .acc-body{display:block}
+  .rowitem{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--sen);font-size:13px}
+  .rowitem:last-child{border-bottom:none}
+  .rowitem .rdate{flex:none;width:42px;color:var(--usu);font-variant-numeric:tabular-nums;font-size:12px;font-weight:700}
+  .rowitem .rname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;color:var(--sumi)}
+  .rowitem .rname .rst{font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700}
+  .rowitem .ramt{flex:none;font-weight:800;font-variant-numeric:tabular-nums}
+  .rowitem .ramt.uri{color:var(--midori)} .rowitem .ramt.juchu{color:var(--murasaki)} .rowitem .ramt.kei{color:var(--shu)}
+  .acc-empty{padding:18px 16px;text-align:center;color:var(--usu);font-size:12px}
+  .rst{font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700}
+  .rst.st-todo{background:rgba(42,157,181,.13);color:var(--murasaki)}
+  .rst.st-done{background:rgba(58,166,85,.15);color:var(--midori)}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="row">
+    <h1><span class="seal" id="headSeal">表</span><span id="headTitle">ダッシュボード</span></h1>
+    <div class="yearsel"><select id="yearSel" onchange="render()"></select><span class="ydō">年</span></div>
+  </div>
+  <div class="periodbar" id="periodbar">
+    <span class="pchip on" data-p="year" onclick="setPeriod('year')">年間</span>
+    <span class="pchip" data-p="month" onclick="setPeriod('month')">月間</span>
+  </div>
+  <div class="monthrow" id="monthrow" style="display:none"></div>
+</div>
+
+<!-- ===== ①売上・受注 ===== -->
+<div class="page" id="page-uriage">
+<div class="wrap">
+  <div class="summary">
+    <div class="eyebrow">売上・受注状況</div>
+    <div class="scope" id="uriScope">今年</div>
+    <div class="bigfig">
+      <div class="lbl">入金待ちの受注額（売上未計上）</div>
+      <div class="val plus" id="pendVal"><span class="yen">¥</span>0</div>
+    </div>
+    <div class="grid2">
+      <div class="cell"><div class="ck"><span class="dot juchu"></span>受注合計</div>
+        <div class="cv" id="juchuTotal" style="color:var(--murasaki)">¥0</div></div>
+      <div class="cell"><div class="ck"><span class="dot uri"></span>売上になった分</div>
+        <div class="cv" id="uriTotal" style="color:var(--midori)">¥0</div></div>
+    </div>
+  </div>
+
+  <div class="subhead">受注リスト（入金待ち → 入金されたら売上になります）</div>
+  <div class="listhead">
+    <span class="t" style="visibility:hidden">_</span>
+    <div class="filt">
+      <span class="chip on" data-jf="all" onclick="setJFilter('all')">すべて</span>
+      <span class="chip" data-jf="todo" onclick="setJFilter('todo')">入金待ち</span>
+      <span class="chip" data-jf="done" onclick="setJFilter('done')">売上になった</span>
+    </div>
+  </div>
+  <div id="juchuList"></div>
+</div>
+</div>
+
+<!-- ===== ②経費 ===== -->
+<div class="page" id="page-keihi">
+<div class="wrap">
+  <div class="summary">
+    <div class="eyebrow">経費状況</div>
+    <div class="scope" id="keiScope">今年</div>
+    <div class="bigfig">
+      <div class="lbl">経費 合計（税込）</div>
+      <div class="val minus" id="keiBigVal"><span class="yen">¥</span>0</div>
+    </div>
+    <div class="kou-line" style="padding-top:4px">
+      <span>うち 支払消費税</span><b id="keiTaxVal" style="color:var(--ai)">¥0</b>
+    </div>
+  </div>
+
+  <div class="subhead">経費リスト</div>
+  <div id="keiList"></div>
+</div>
+</div>
+
+<!-- ===== ③ダッシュボード ===== -->
+<div class="page active" id="page-dash">
+<div class="wrap">
+  <div class="summary">
+    <div class="eyebrow">全体ダッシュボード</div>
+    <div class="scope" id="dashScope">年間</div>
+    <div class="bigfig">
+      <div class="lbl">収入（売上 − 経費）</div>
+      <div class="val" id="dashNet"><span class="yen">¥</span>0</div>
+    </div>
+    <div class="grid3">
+      <div class="cell"><div class="ck"><span class="dot juchu"></span>受注</div>
+        <div class="cv" id="dJuchu" style="color:var(--murasaki)">¥0</div></div>
+      <div class="cell"><div class="ck"><span class="dot uri"></span>売上</div>
+        <div class="cv" id="dUri" style="color:var(--midori)">¥0</div></div>
+      <div class="cell"><div class="ck"><span class="dot kei"></span>経費</div>
+        <div class="cv" id="dKei" style="color:var(--shu)">¥0</div></div>
+    </div>
+    <div class="kou-line"><span><span class="dot kou" style="margin-right:6px"></span>税控除</span><b id="dKou">¥0</b></div>
+  </div>
+
+  <div class="card">
+    <h2>年間推移（折れ線）</h2>
+    <div class="serieschips">
+      <span class="schip s-juchu on" data-s="juchu" onclick="toggleSeries('juchu')"><span class="dot juchu"></span>受注</span>
+      <span class="schip s-uri on" data-s="uri" onclick="toggleSeries('uri')"><span class="dot uri"></span>売上</span>
+      <span class="schip s-kei on" data-s="kei" onclick="toggleSeries('kei')"><span class="dot kei"></span>経費</span>
+    </div>
+    <div class="chartbox" id="lineBox"></div>
+  </div>
+
+  <div class="acc">
+    <button class="acc-head" onclick="toggleAcc('juchu')">
+      <span class="acc-title"><span class="dot juchu"></span>受注一覧</span>
+      <span class="acc-meta"><span id="accJuchuSum">¥0</span><span class="acc-arrow" id="accJuchuArrow">▾</span></span>
+    </button>
+    <div class="acc-body" id="accJuchuBody"></div>
+  </div>
+  <div class="acc">
+    <button class="acc-head" onclick="toggleAcc('uri')">
+      <span class="acc-title"><span class="dot uri"></span>売上一覧</span>
+      <span class="acc-meta"><span id="accUriSum">¥0</span><span class="acc-arrow" id="accUriArrow">▾</span></span>
+    </button>
+    <div class="acc-body" id="accUriBody"></div>
+  </div>
+  <div class="acc" style="margin-bottom:16px">
+    <button class="acc-head" onclick="toggleAcc('kei')">
+      <span class="acc-title"><span class="dot kei"></span>経費一覧</span>
+      <span class="acc-meta"><span id="accKeiSum">¥0</span><span class="acc-arrow" id="accKeiArrow">▾</span></span>
+    </button>
+    <div class="acc-body" id="accKeiBody"></div>
+  </div>
+
+  <button class="report-btn" onclick="openReport()">📄 確定申告用にまとめを表示</button>
+  <button class="csv-btn" onclick="exportCSV()">⬇ スプレッドシート（CSV）に書き出す</button>
+</div>
+</div>
+
+<!-- FAB -->
+<div class="fab" id="fab"></div>
+
+<!-- タブバー -->
+<div class="tabbar">
+  <button class="on" id="tab-dash" onclick="switchTab('dash')"><span class="ti">表</span><span class="tl">ダッシュボード</span></button>
+  <button id="tab-uriage" onclick="switchTab('uriage')"><span class="ti">請</span><span class="tl">売上・受注</span></button>
+  <button id="tab-keihi" onclick="switchTab('keihi')"><span class="ti">経</span><span class="tl">経費</span></button>
+</div>
+
+<!-- 受注モーダル -->
+<div class="ov" id="ovJuchu" onclick="if(event.target===this)closeJuchu()">
+  <div class="sheet">
+    <div class="grip"></div>
+    <h3><span class="tag" style="background:var(--murasaki)"></span><span id="jModalTitle">受注を登録</span></h3>
+    <div class="fld amtfld"><label>受注金額</label><span class="yk">¥</span>
+      <input id="jAmt" type="number" inputmode="numeric" placeholder="0" oninput="updateJTaxBreak()"></div>
+    <div class="fld"><label>消費税</label>
+      <div class="taxtoggle">
+        <div class="taxbtn on" id="jTaxIn" onclick="setJTax('in')">税込 10%</div>
+        <div class="taxbtn" id="jTaxOut" onclick="setJTax('none')">税抜・対象外</div>
+      </div>
+      <div class="taxbreak" id="jTaxBreak"></div>
+    </div>
+    <div class="fld"><label>請負（受注）企業名</label>
+      <input id="jClient" type="text" placeholder="例：B社 / 〇〇株式会社"></div>
+    <div class="fld"><label>受注日</label><input id="jDate" type="date"></div>
+    <div class="fld"><label>入金予定日（任意）</label><input id="jDue" type="date"></div>
+    <button class="save" id="jSave" style="background:var(--murasaki)" onclick="saveJuchu()">受注を登録</button>
+  </div>
+</div>
+
+<!-- 入金（売上計上）モーダル -->
+<div class="ov" id="ovPaid" onclick="if(event.target===this)closePaid()">
+  <div class="sheet">
+    <div class="grip"></div>
+    <h3><span class="tag" style="background:var(--midori)"></span><span>入金 → 売上にする</span></h3>
+    <div id="paidInfo" style="font-size:13px;color:var(--usu);margin-bottom:16px;line-height:1.6"></div>
+    <div class="fld"><label>入金日（売上になった日）</label><input id="paidDate" type="date"></div>
+    <button class="save" style="background:var(--midori)" onclick="confirmPaid()">入金された（売上にする）</button>
+  </div>
+</div>
+
+<!-- 経費モーダル -->
+<div class="ov" id="ovKei" onclick="if(event.target===this)closeKei()">
+  <div class="sheet">
+    <div class="grip"></div>
+    <h3><span class="tag" id="kTag" style="background:var(--shu)"></span><span id="kTitle">経費を登録</span></h3>
+    <div class="fld amtfld"><label id="kAmtLbl">金額</label><span class="yk">¥</span>
+      <input id="kAmt" type="number" inputmode="numeric" placeholder="0" oninput="updateKTaxBreak()"></div>
+    <div class="fld"><label>消費税</label>
+      <div class="taxtoggle">
+        <div class="taxbtn on" id="kTaxIn" onclick="setKTax('in')">税込 10%</div>
+        <div class="taxbtn" id="kTaxOut" onclick="setKTax('none')">税抜・対象外</div>
+      </div>
+      <div class="taxbreak" id="kTaxBreak"></div>
+    </div>
+    <div class="fld"><label id="kCatLbl">経費項目</label><div class="catrow" id="kCatRow"></div></div>
+    <div class="kbox" id="kKbox" style="display:none">
+      ふるさと納税・医療費・寄附金などの税控除はここに登録します。所得から差し引かれる「控除」として申告時に別欄でまとめます。
+    </div>
+    <div class="fld"><label>使用用途（会社名 or 用途）</label>
+      <input id="kNote" type="text" placeholder="例：A社打合せ / 事務用品 など"></div>
+    <div class="fld"><label>日付</label><input id="kDate" type="date"></div>
+    <button class="save" id="kSave" style="background:var(--shu)" onclick="saveKei()">登録する</button>
+  </div>
+</div>
+
+<!-- 申告まとめ -->
+<div class="ov" id="ovRep" onclick="if(event.target===this)closeReport()">
+  <div class="sheet">
+    <div class="grip"></div>
+    <h3><span class="tag" style="background:var(--kin)"></span><span id="repYear"></span></h3>
+    <div id="repBody"></div>
+    <div class="repnote">※ この内容は記録の集計です。実際の申告では青色申告特別控除・基礎控除など別途適用される控除があります。消費税の納税額は簡易的な目安です。詳しくは税務署または税理士にご確認ください。</div>
+    <button class="save" style="background:var(--kin);margin-top:18px" onclick="closeReport()">閉じる</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY='shushi_daicho_v3';
+const TAXRATE=0.10;
+const KEICATS=['仕入','外注費','旅費交通費','通信費','消耗品費','接待交際費','地代家賃','水道光熱費','広告宣伝費','その他経費'];
+const KOUCATS=['ふるさと納税','医療費','寄附金','生命保険料','社会保険料','その他控除'];
+
+let store=load();
+let juchus=store.juchus||[];   // 受注（status: todo/done, 入金済で txnへ）
+let txns=store.txns||[];        // 売上(uri)・経費(kei)・控除(kou)
+let kType='kei', kCat='', kTax='in', jTax='in';
+let jfilter='all';
+let period='year', curMonth=new Date().getMonth()+1;
+let tab='uriage';
+let paidId=null;
+let editJuchuId=null, editTxnId=null;
+let series={uri:true,juchu:true,kei:true};
+let accOpen={uri:false,juchu:false,kei:false};
+
+function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):{}}catch(e){return {}}}
+function persist(){localStorage.setItem(KEY,JSON.stringify({juchus,txns}))}
+function yen(n){return '¥'+Math.round(n).toLocaleString('ja-JP')}
+function calcTax(amt,mode){if(mode==='in'){const body=Math.round(amt/(1+TAXRATE));return {gross:amt,body,tax:amt-body}}return {gross:amt,body:amt,tax:0}}
+
+function years(){const ys=new Set([...txns.map(t=>t.date.slice(0,4)),...juchus.map(j=>j.date.slice(0,4))]);ys.add(String(new Date().getFullYear()));return [...ys].sort().reverse()}
+function curYear(){return document.getElementById('yearSel').value}
+function initYears(){const sel=document.getElementById('yearSel');const prev=sel.value;sel.innerHTML=years().map(y=>`<option value="${y}">${y}</option>`).join('');if(prev)sel.value=prev}
+function buildMonthRow(){document.getElementById('monthrow').innerHTML=Array.from({length:12},(_,i)=>i+1).map(m=>`<span class="mchip ${m===curMonth?'on':''}" onclick="setMonth(${m})">${m}月</span>`).join('')}
+function setPeriod(p){period=p;document.querySelectorAll('.pchip').forEach(c=>c.classList.toggle('on',c.dataset.p===p));document.getElementById('monthrow').style.display=p==='month'?'flex':'none';if(p==='month')buildMonthRow();render()}
+function setMonth(m){curMonth=m;buildMonthRow();render()}
+
+function switchTab(t){
+  tab=t;
+  ['uriage','keihi','dash'].forEach(p=>{
+    document.getElementById('page-'+p).classList.toggle('active',p===t);
+    document.getElementById('tab-'+p).classList.toggle('on',p===t);
+  });
+  const fab=document.getElementById('fab');
+  const titles={uriage:['売上・受注','請'],keihi:['経費','経'],dash:['ダッシュボード','表']};
+  document.getElementById('headTitle').textContent=titles[t][0];
+  document.getElementById('headSeal').textContent=titles[t][1];
+  // 期間バーは全タブ共通で表示
+  document.getElementById('periodbar').style.display='flex';
+  document.getElementById('monthrow').style.display=(period==='month')?'flex':'none';
+  if(t==='uriage'){fab.classList.remove('hidden');fab.classList.add('single');fab.innerHTML=`<button class="b-juchu" onclick="openJuchu()"><span class="p">＋</span></button>`}
+  else if(t==='keihi'){fab.classList.remove('hidden');fab.classList.remove('single');fab.innerHTML=`<button class="b-kei" onclick="openKei('kei')"><span class="p">＋</span>経費を登録</button><button class="b-kei" style="background:var(--kin)" onclick="openKei('kou')"><span class="p">＋</span>税控除</button>`}
+  else{fab.classList.add('hidden');fab.classList.remove('single')}
+  render();
+}
+
+/* ---------- 受注 ---------- */
+function openJuchu(){editJuchuId=null;document.getElementById('jModalTitle').textContent='受注を登録';document.getElementById('jSave').textContent='受注を登録';document.getElementById('ovJuchu').classList.add('show');document.getElementById('jAmt').value='';document.getElementById('jClient').value='';document.getElementById('jDate').value=new Date().toISOString().slice(0,10);document.getElementById('jDue').value='';setJTax('in');setTimeout(()=>document.getElementById('jAmt').focus(),300)}
+function openEditJuchu(id){const j=juchus.find(x=>x.id===id);if(!j)return;editJuchuId=id;document.getElementById('jModalTitle').textContent='受注を編集';document.getElementById('jSave').textContent='変更を保存';document.getElementById('ovJuchu').classList.add('show');document.getElementById('jAmt').value=j.amt;document.getElementById('jClient').value=j.client;document.getElementById('jDate').value=j.date;document.getElementById('jDue').value=j.due||'';setJTax(j.tax);setTimeout(()=>document.getElementById('jAmt').focus(),300)}
+function setJTax(m){jTax=m;document.getElementById('jTaxIn').classList.toggle('on',m==='in');document.getElementById('jTaxOut').classList.toggle('on',m==='none');updateJTaxBreak()}
+function updateJTaxBreak(){const a=parseFloat(document.getElementById('jAmt').value)||0;const b=document.getElementById('jTaxBreak');if(a<=0||jTax!=='in'){b.classList.remove('show');return}const c=calcTax(a,'in');b.innerHTML=`税抜本体 <b>${yen(c.body)}</b> ＋ 消費税 <b>${yen(c.tax)}</b>`;b.classList.add('show')}
+function closeJuchu(){document.getElementById('ovJuchu').classList.remove('show')}
+function saveJuchu(){const a=parseFloat(document.getElementById('jAmt').value);if(!a||a<=0){toast('受注金額を入力してください');return}const cl=document.getElementById('jClient').value.trim();if(!cl){toast('企業名を入力してください');return}const date=document.getElementById('jDate').value,due=document.getElementById('jDue').value;
+  if(editJuchuId){const j=juchus.find(x=>x.id===editJuchuId);j.amt=a;j.tax=jTax;j.client=cl;j.date=date;j.due=due;if(j.status==='done'){const t=txns.find(t=>t.fromJuchu===j.id);if(t){t.amt=a;t.tax=jTax;t.note=cl}}toast('変更を保存しました');}
+  else{juchus.push({id:Date.now(),amt:a,tax:jTax,client:cl,date:date,due:due,status:'todo'});toast('受注を登録しました');}
+  persist();closeJuchu();initYears();document.getElementById('yearSel').value=date.slice(0,4);render()}
+function delJuchu(id){if(!confirm('この受注を削除しますか？'))return;const j=juchus.find(x=>x.id===id);if(j&&j.status==='done'){txns=txns.filter(t=>t.fromJuchu!==id)}juchus=juchus.filter(x=>x.id!==id);persist();render();toast('削除しました')}
+
+/* 入金→売上計上 */
+function openPaid(id){paidId=id;const j=juchus.find(x=>x.id===id);const c=calcTax(j.amt,j.tax);document.getElementById('paidInfo').innerHTML=`<b style="color:var(--sumi)">${esc(j.client)}</b><br>受注額 ${yen(j.amt)}（${j.tax==='in'?'税込・税抜'+yen(c.body):'税対象外'}）<br>入金された日を記録して、この受注を売上にします。`;document.getElementById('paidDate').value=new Date().toISOString().slice(0,10);document.getElementById('ovPaid').classList.add('show')}
+function closePaid(){document.getElementById('ovPaid').classList.remove('show')}
+function confirmPaid(){const j=juchus.find(x=>x.id===paidId);if(!j)return;const d=document.getElementById('paidDate').value;txns.push({id:Date.now(),type:'uri',cat:'売上',amt:j.amt,tax:j.tax,note:j.client,date:d,fromJuchu:j.id});j.status='done';j.saleDate=d;persist();closePaid();initYears();render();toast('売上にしました')}
+/* 売上計上を取り消し */
+function revertSale(id){if(!confirm('未入金（入金待ち）に戻しますか？\n売上から取り消されます'))return;const j=juchus.find(x=>x.id===id);if(!j)return;txns=txns.filter(t=>t.fromJuchu!==id);j.status='todo';delete j.saleDate;persist();render();toast('未入金に戻しました')}
+
+function setJFilter(f){jfilter=f;document.querySelectorAll('[data-jf]').forEach(c=>c.classList.toggle('on',c.dataset.jf===f));renderUriage()}
+
+/* ---------- 経費 ---------- */
+function openKei(type){editTxnId=null;kType=type;document.getElementById('kSave').textContent='登録する';document.getElementById('ovKei').classList.add('show');document.getElementById('kAmt').value='';document.getElementById('kNote').value='';document.getElementById('kDate').value=new Date().toISOString().slice(0,10);setKTax(type==='kou'?'none':'in');buildKCats();setTimeout(()=>document.getElementById('kAmt').focus(),300)}
+function openEditKei(id){const t=txns.find(x=>x.id===id);if(!t)return;editTxnId=id;kType=t.type;document.getElementById('kSave').textContent='変更を保存';document.getElementById('ovKei').classList.add('show');document.getElementById('kAmt').value=t.amt;document.getElementById('kNote').value=t.note||'';document.getElementById('kDate').value=t.date;setKTax(t.tax);buildKCats();
+  // 既存カテゴリを選択状態に
+  const chips=document.querySelectorAll('#kCatRow .catchip');chips.forEach(ch=>{if(ch.textContent===t.cat){ch.classList.add('on');kCat=t.cat}});
+  setTimeout(()=>document.getElementById('kAmt').focus(),300)}
+function buildKCats(){const cats=kType==='kou'?KOUCATS:KEICATS;document.getElementById('kCatRow').innerHTML=cats.map(c=>`<span class="catchip" onclick="pickKCat(this,'${c}')">${c}</span>`).join('');kCat='';const isKou=kType==='kou';document.getElementById('kTag').style.background=isKou?'var(--kin)':'var(--shu)';document.getElementById('kTitle').textContent=isKou?(editTxnId?'税控除を編集':'税控除を登録'):(editTxnId?'経費を編集':'経費を登録');document.getElementById('kCatLbl').textContent=isKou?'控除項目':'経費項目';document.getElementById('kAmtLbl').textContent=isKou?'控除額':'経費金額';document.getElementById('kSave').style.background=isKou?'var(--kin)':'var(--shu)';document.getElementById('kKbox').style.display=isKou?'block':'none'}
+function pickKCat(el,c){document.querySelectorAll('#kCatRow .catchip').forEach(x=>x.classList.remove('on'));el.classList.add('on');kCat=c}
+function setKTax(m){kTax=m;document.getElementById('kTaxIn').classList.toggle('on',m==='in');document.getElementById('kTaxOut').classList.toggle('on',m==='none');updateKTaxBreak()}
+function updateKTaxBreak(){const a=parseFloat(document.getElementById('kAmt').value)||0;const b=document.getElementById('kTaxBreak');if(a<=0||kTax!=='in'){b.classList.remove('show');return}const c=calcTax(a,'in');b.innerHTML=`税抜本体 <b>${yen(c.body)}</b> ＋ 消費税 <b>${yen(c.tax)}</b>`;b.classList.add('show')}
+function closeKei(){document.getElementById('ovKei').classList.remove('show')}
+function saveKei(){const a=parseFloat(document.getElementById('kAmt').value);if(!a||a<=0){toast('金額を入力してください');return}if(!kCat){toast('項目を選んでください');return}const date=document.getElementById('kDate').value,note=document.getElementById('kNote').value.trim();
+  if(editTxnId){const t=txns.find(x=>x.id===editTxnId);t.type=kType;t.cat=kCat;t.amt=a;t.tax=kTax;t.note=note;t.date=date;toast('変更を保存しました');}
+  else{txns.push({id:Date.now(),type:kType,cat:kCat,amt:a,tax:kTax,note:note,date:date});toast('登録しました');}
+  persist();closeKei();initYears();document.getElementById('yearSel').value=date.slice(0,4);render()}
+function delTxn(id){if(!confirm('この記録を削除しますか？'))return;txns=txns.filter(t=>t.id!==id);persist();render();toast('削除しました')}
+
+/* ---------- 集計 ---------- */
+function sumGross(arr){return arr.reduce((s,t)=>s+t.amt,0)}
+function sumTax(arr){return arr.reduce((s,t)=>s+calcTax(t.amt,t.tax).tax,0)}
+function dashScopeTxns(){const y=curYear();return txns.filter(t=>{if(t.date.slice(0,4)!==y)return false;if(period==='month')return parseInt(t.date.slice(5,7))===curMonth;return true})}
+function dashScopeJuchu(){const y=curYear();return juchus.filter(j=>{if(j.date.slice(0,4)!==y)return false;if(period==='month')return parseInt(j.date.slice(5,7))===curMonth;return true})}
+
+function render(){if(tab==='uriage')renderUriage();else if(tab==='keihi')renderKei();else renderDash()}
+
+function renderUriage(){
+  const y=curYear();
+  let js=juchus.filter(j=>j.date.slice(0,4)===y);
+  if(period==='month')js=js.filter(j=>parseInt(j.date.slice(5,7))===curMonth);
+  const todo=js.filter(j=>j.status==='todo'), done=js.filter(j=>j.status==='done');
+  document.getElementById('uriScope').textContent=period==='month'?`${y}年 ${curMonth}月`:`${y}年`;
+  document.getElementById('pendVal').innerHTML=`<span class="yen">¥</span>${Math.round(sumGross(todo)).toLocaleString('ja-JP')}`;
+  document.getElementById('juchuTotal').textContent=yen(sumGross(js));
+  document.getElementById('uriTotal').textContent=yen(sumGross(done));
+  let list=js.slice();if(jfilter!=='all')list=list.filter(j=>j.status===jfilter);
+  list.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  const wrap=document.getElementById('juchuList');
+  if(list.length===0){wrap.innerHTML=`<div class="empty"><div class="e1">請</div><div class="e2">${period==='month'?'この月の受注はありません。':'受注がありません。'}<br>下のボタンから受注を登録しましょう。<br>入金されたら「入金された（売上にする）」を押します。</div></div>`;return}
+  wrap.innerHTML=list.map(j=>{
+    const c=calcTax(j.amt,j.tax);const taxLbl=j.tax==='in'?'税込':'税対象外';
+    const due=j.due?`入金予定 ${j.due.slice(5).replace('-','/')}`:'';
+    const st=j.status==='done'?`<span class="stbadge st-done">売上になった ${j.saleDate?j.saleDate.slice(5).replace('-','/'):''}</span>`:`<span class="stbadge st-todo">入金待ち</span>`;
+    const act=j.status==='todo'?`<div class="juchu-actions"><button class="miniBtn go" onclick="openPaid(${j.id})">入金された（売上にする）</button><button class="miniBtn" onclick="openEditJuchu(${j.id})">編集</button><button class="miniBtn" onclick="delJuchu(${j.id})">削除</button></div>`:`<div class="juchu-actions"><button class="miniBtn" onclick="revertSale(${j.id})">未入金に戻す</button><button class="miniBtn" onclick="openEditJuchu(${j.id})">編集</button><button class="miniBtn" onclick="delJuchu(${j.id})">削除</button></div>`;
+    return `<div class="txn" style="flex-wrap:wrap;align-items:flex-start">
+      <div class="bar juchu"></div>
+      <div class="info"><div class="nm">${esc(j.client)}</div>
+        <div class="meta">${st}<span class="taxbadge">${taxLbl}</span><span>受注 ${j.date.slice(5).replace('-','/')}</span>${due?`<span>${due}</span>`:''}</div></div>
+      <div class="right"><div class="amt juchu">${yen(j.amt)}</div>${j.tax==='in'?`<div class="net">税抜 ${yen(c.body)}</div>`:''}</div>
+      <div style="flex-basis:100%">${act}</div></div>`;
+  }).join('');
+}
+
+function renderKei(){
+  const y=curYear();
+  let ks=txns.filter(t=>t.date.slice(0,4)===y&&(t.type==='kei'||t.type==='kou'));
+  if(period==='month')ks=ks.filter(t=>parseInt(t.date.slice(5,7))===curMonth);
+  const kei=ks.filter(t=>t.type==='kei');
+  document.getElementById('keiScope').textContent=period==='month'?`${y}年 ${curMonth}月`:`${y}年`;
+  document.getElementById('keiBigVal').innerHTML=`<span class="yen">¥</span>${Math.round(sumGross(kei)).toLocaleString('ja-JP')}`;
+  document.getElementById('keiTaxVal').textContent=yen(sumTax(kei));
+  ks.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  const wrap=document.getElementById('keiList');
+  if(ks.length===0){wrap.innerHTML=`<div class="empty"><div class="e1">経</div><div class="e2">${period==='month'?'この月の経費はありません。':'経費がありません。'}<br>下のボタンから登録しましょう。</div></div>`;return}
+  wrap.innerHTML=ks.map(t=>{
+    const c=calcTax(t.amt,t.tax);const taxLbl=t.tax==='in'?'税込':'税対象外';
+    return `<div class="txn" style="flex-wrap:wrap;align-items:flex-start"><div class="bar ${t.type}"></div>
+      <div class="info"><div class="nm">${t.note?esc(t.note):t.cat}</div>
+        <div class="meta"><span class="cat">${t.cat}</span><span class="taxbadge">${taxLbl}</span><span>${t.date.slice(5).replace('-','/')}</span></div></div>
+      <div class="right"><div class="amt ${t.type}">${t.type==='kei'?'−':''}${yen(t.amt)}</div>${t.tax==='in'?`<div class="net">税抜 ${yen(c.body)}</div>`:''}</div>
+      <div style="flex-basis:100%"><div class="juchu-actions"><button class="miniBtn" onclick="openEditKei(${t.id})">編集</button><button class="miniBtn" onclick="delTxn(${t.id})">削除</button></div></div></div>`;
+  }).join('');
+}
+
+function renderDash(){
+  const ts=dashScopeTxns(), js=dashScopeJuchu();
+  const uri=ts.filter(t=>t.type==='uri'), kei=ts.filter(t=>t.type==='kei'), kou=ts.filter(t=>t.type==='kou');
+  const sUri=sumGross(uri), sKei=sumGross(kei), sJuchu=sumGross(js), sKou=sumGross(kou);
+  document.getElementById('dashScope').textContent=period==='month'?`${curYear()}年 ${curMonth}月`:`${curYear()}年 通年`;
+  document.getElementById('dJuchu').textContent=yen(sJuchu);
+  document.getElementById('dUri').textContent=yen(sUri);
+  document.getElementById('dKei').textContent=yen(sKei);
+  document.getElementById('dKou').textContent=yen(sKou);
+  const net=sUri-sKei;const nv=document.getElementById('dashNet');
+  nv.innerHTML=`<span class="yen">¥</span>${Math.round(net).toLocaleString('ja-JP')}`;nv.className='val '+(net>=0?'plus':'minus');
+  drawLine();
+  renderAccordions(uri,js,kei,sUri,sJuchu,sKei);
+}
+
+function renderAccordions(uri,juchu,kei,sUri,sJuchu,sKei){
+  document.getElementById('accUriSum').textContent=yen(sUri);
+  document.getElementById('accJuchuSum').textContent=yen(sJuchu);
+  document.getElementById('accKeiSum').textContent=yen(sKei);
+  // 売上
+  const uriSorted=uri.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  document.getElementById('accUriBody').innerHTML=uriSorted.length?uriSorted.map(t=>rowItem(t.date,t.note||t.cat,t.amt,'uri')).join(''):'<div class="acc-empty">売上はありません</div>';
+  // 受注（状態バッジ付き）
+  const juchuSorted=juchu.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  document.getElementById('accJuchuBody').innerHTML=juchuSorted.length?juchuSorted.map(j=>{
+    const badge=j.status==='done'?`<span class="rst st-done">売上済</span>`:`<span class="rst st-todo">入金待ち</span>`;
+    return rowItem(j.date,j.client,j.amt,'juchu',badge);
+  }).join(''):'<div class="acc-empty">受注はありません</div>';
+  // 経費
+  const keiSorted=kei.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  document.getElementById('accKeiBody').innerHTML=keiSorted.length?keiSorted.map(t=>rowItem(t.date,t.note||t.cat,t.amt,'kei')).join(''):'<div class="acc-empty">経費はありません</div>';
+  // 開閉状態を反映
+  ['uri','juchu','kei'].forEach(k=>{
+    const head=document.querySelector(`#acc${k.charAt(0).toUpperCase()+k.slice(1)}Body`).parentElement;
+    head.classList.toggle('open',accOpen[k]);
+  });
+}
+function rowItem(date,name,amt,type,badge){
+  return `<div class="rowitem"><span class="rdate">${date.slice(5).replace('-','/')}</span><span class="rname">${esc(name)}${badge||''}</span><span class="ramt ${type}">${type==='kei'?'−':''}${yen(amt)}</span></div>`;
+}
+function toggleAcc(k){
+  accOpen[k]=!accOpen[k];
+  const cap=k.charAt(0).toUpperCase()+k.slice(1);
+  document.getElementById('acc'+cap+'Body').parentElement.classList.toggle('open',accOpen[k]);
+}
+
+function toggleSeries(s){series[s]=!series[s];document.querySelector(`.schip[data-s="${s}"]`).classList.toggle('on',series[s]);drawLine()}
+
+function drawLine(){
+  const box=document.getElementById('lineBox');
+  const y=curYear();
+  const mU=Array(12).fill(0),mJ=Array(12).fill(0),mK=Array(12).fill(0);
+  txns.filter(t=>t.date.slice(0,4)===y).forEach(t=>{const m=parseInt(t.date.slice(5,7))-1;if(t.type==='uri')mU[m]+=t.amt;if(t.type==='kei')mK[m]+=t.amt});
+  juchus.filter(j=>j.date.slice(0,4)===y).forEach(j=>{const m=parseInt(j.date.slice(5,7))-1;mJ[m]+=j.amt});
+  const sets=[];
+  if(series.uri)sets.push({d:mU,c:'var(--midori)'});
+  if(series.juchu)sets.push({d:mJ,c:'var(--murasaki)'});
+  if(series.kei)sets.push({d:mK,c:'var(--shu)'});
+  const allv=sets.flatMap(s=>s.d);
+  if(allv.every(v=>v===0)){box.innerHTML='<div class="nodata">データを登録すると推移が表示されます</div>';return}
+  const rawMax=Math.max(1,...allv);
+  // 目盛りをきりのいい値に丸める
+  const niceMax=niceCeil(rawMax);
+  const ticks=4;
+  // 縦軸ラベルの幅を金額の桁で動的に
+  const maxLabel=fmtAxis(niceMax);
+  const padL=Math.max(34,maxLabel.length*7+8);
+  const W=440,H=190,padT=10,padB=22,padR=8;
+  const iw=W-padL-padR, ih=H-padT;
+  const xx=m=>padL+iw*(m/11);
+  const yy=v=>padT+ih*(1-v/niceMax);
+  let svg=`<svg viewBox="0 0 ${W} ${H+padB}" preserveAspectRatio="xMidYMid meet">`;
+  // 横グリッド＋縦軸ラベル
+  for(let i=0;i<=ticks;i++){
+    const val=niceMax*(ticks-i)/ticks;
+    const gy=padT+ih*i/ticks;
+    svg+=`<line class="gridline" x1="${padL}" y1="${gy}" x2="${W}" y2="${gy}"/>`;
+    svg+=`<text class="gx" x="${padL-6}" y="${gy+3}" text-anchor="end">${fmtAxis(val)}</text>`;
+  }
+  sets.forEach(s=>{
+    let pts=s.d.map((v,m)=>`${xx(m)},${yy(v)}`).join(' ');
+    svg+=`<polyline points="${pts}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s.d.forEach((v,m)=>{svg+=`<circle cx="${xx(m)}" cy="${yy(v)}" r="2.6" fill="${s.c}"/>`});
+  });
+  for(let m=0;m<12;m++)svg+=`<text class="gx" x="${xx(m)}" y="${H+14}" text-anchor="middle">${m+1}</text>`;
+  svg+=`</svg>`;box.innerHTML=svg;
+}
+/* きりのいい上限値 */
+function niceCeil(n){
+  if(n<=0)return 1;
+  const pow=Math.pow(10,Math.floor(Math.log10(n)));
+  const f=n/pow;
+  let nf;
+  if(f<=1)nf=1;else if(f<=2)nf=2;else if(f<=2.5)nf=2.5;else if(f<=5)nf=5;else nf=10;
+  return nf*pow;
+}
+/* 軸ラベル：万/億単位に短縮 */
+function fmtAxis(v){
+  if(v>=100000000){const x=v/100000000;return (Number.isInteger(x)?x:x.toFixed(1))+'億'}
+  if(v>=10000){const x=v/10000;return (Number.isInteger(x)?x:x.toFixed(1))+'万'}
+  return Math.round(v).toLocaleString('ja-JP');
+}
+
+/* ---------- 申告まとめ ---------- */
+function openReport(){
+  const y=curYear();const ts=txns.filter(t=>t.date.slice(0,4)===y);
+  document.getElementById('repYear').textContent=`${y}年 確定申告まとめ`;
+  const byCat=type=>{const m={};ts.filter(t=>t.type===type).forEach(t=>{m[t.cat]=(m[t.cat]||0)+t.amt});return Object.entries(m).sort((a,b)=>b[1]-a[1])};
+  const uri=byCat('uri'),kei=byCat('kei'),kou=byCat('kou');
+  const uriArr=ts.filter(t=>t.type==='uri'),keiArr=ts.filter(t=>t.type==='kei');
+  const sUri=sumGross(uriArr),sKei=sumGross(keiArr),sKou=ts.filter(t=>t.type==='kou').reduce((s,t)=>s+t.amt,0);
+  const taxUri=sumTax(uriArr),taxKei=sumTax(keiArr);
+  let h='<table class="reptbl">';
+  h+=`<tr class="tot"><td>売上・収入 合計（税込）</td><td>${yen(sUri)}</td></tr>`;
+  uri.forEach(([c,v])=>h+=`<tr class="sub"><td>${c}</td><td>${yen(v)}</td></tr>`);
+  if(taxUri>0)h+=`<tr class="taxr"><td>うち 受取消費税</td><td>${yen(taxUri)}</td></tr>`;
+  h+=`<tr class="tot"><td>経費 合計（税込）</td><td>${yen(sKei)}</td></tr>`;
+  kei.forEach(([c,v])=>h+=`<tr class="sub"><td>${c}</td><td>${yen(v)}</td></tr>`);
+  if(taxKei>0)h+=`<tr class="taxr"><td>うち 支払消費税</td><td>${yen(taxKei)}</td></tr>`;
+  h+=`<tr class="net"><td>収入（売上−経費）</td><td>${yen(sUri-sKei)}</td></tr>`;
+  if(taxUri-taxKei>0)h+=`<tr class="taxr"><td>消費税の目安（受取−支払）</td><td>${yen(taxUri-taxKei)}</td></tr>`;
+  if(kou.length){h+=`<tr class="tot"><td>税控除 合計</td><td>${yen(sKou)}</td></tr>`;kou.forEach(([c,v])=>h+=`<tr class="sub"><td>${c}</td><td>${yen(v)}</td></tr>`)}
+  h+='</table>';
+  document.getElementById('repBody').innerHTML=h;
+  document.getElementById('ovRep').classList.add('show');
+}
+function closeReport(){document.getElementById('ovRep').classList.remove('show')}
+
+/* ---------- CSV出力 ---------- */
+function exportCSV(){
+  const y=curYear();
+  const rows=[['区分','日付','項目/企業名','使用用途・摘要','状態','税区分','金額(税込)','税抜本体','消費税']];
+  juchus.filter(j=>j.date.slice(0,4)===y).forEach(j=>{
+    const c=calcTax(j.amt,j.tax);
+    rows.push(['受注',j.date,j.client,j.due?('入金予定 '+j.due):'',j.status==='done'?('売上計上 '+(j.saleDate||'')):'入金待ち',j.tax==='in'?'税込10%':'税対象外',j.amt,c.body,c.tax]);
+  });
+  const lbl={uri:'売上',kei:'経費',kou:'控除'};
+  txns.filter(t=>t.date.slice(0,4)===y).forEach(t=>{
+    const c=calcTax(t.amt,t.tax);
+    rows.push([lbl[t.type],t.date,t.cat,t.note||'',t.type==='uri'&&t.fromJuchu?'受注から計上':'',t.tax==='in'?'税込10%':'税対象外',t.amt,c.body,c.tax]);
+  });
+  const csv=rows.map(r=>r.map(cell=>{const s=String(cell).replace(/"/g,'""');return /[",\n]/.test(s)?`"${s}"`:s}).join(',')).join('\r\n');
+  const bom='\uFEFF';
+  const blob=new Blob([bom+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`収支台帳_${y}年.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('CSVを書き出しました');
+}
+
+function esc(s){return s.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}
+let tT;function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),1900)}
+
+initYears();switchTab('dash');
+</script>
+</body>
+</html>
